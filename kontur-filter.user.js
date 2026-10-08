@@ -1,7 +1,9 @@
 // ==UserScript==
 // @name         Фильтр запрещённых слов для Контур.Толка
 // @namespace    https://example.local/
-// @version      2.0
+// @version      2.1
+// @downloadURL  https://raw.githubusercontent.com/Kukiv1272/-.-/refs/heads/main/kontur-filter.user.js
+// @updateURL    https://raw.githubusercontent.com/Kukiv1272/-.-/refs/heads/main/kontur-filter.user.js
 // @description  Загружает запрещённые слова из Google Таблицы
 // @match        https://talk.kontur.ru/*
 // @match        https://*.talk.kontur.ru/*
