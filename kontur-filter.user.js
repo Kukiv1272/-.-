@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Фильтр запрещённых слов для Контур.Толка
 // @namespace    https://example.local/
-// @version      2.2
-// @description  Загружает запрещённые слова из Google Таблицы
+// @version      2.3
+// @description  Блокирует сообщения с запрещёнными словами
 // @match        https://talk.kontur.ru/*
 // @match        https://*.talk.kontur.ru/*
 // @match        https://*.ktalk.ru/*
@@ -22,7 +22,7 @@
 
     const REFRESH_INTERVAL = 5 * 60 * 1000;
 
-    // Подходит для обоих вариантов поля из присланного HTML
+    // Находит оба варианта поля сообщения
     const MESSAGE_FIELD_SELECTOR =
         'textarea.area[placeholder="Отправить сообщение"]';
 
@@ -32,7 +32,6 @@
     let forbiddenWords = [];
     let wordsLoaded = false;
     let wordsLoadError = false;
-    let lastRequestAt = 0;
 
     let warningElement = null;
     let warningTimer = null;
@@ -53,78 +52,91 @@
     }
 
 
-    function getMessageFields(source) {
-        if (!(source instanceof Element)) {
-            return [];
-        }
-
-        if (source.matches(MESSAGE_FIELD_SELECTOR)) {
-            return [source];
-        }
-
-        // Поле и кнопка отправки находятся в одном .text
-        const composer = source.closest('.text');
-
-        if (composer) {
-            const fields = Array.from(
-                composer.querySelectorAll(MESSAGE_FIELD_SELECTOR)
-            );
-
-            if (fields.length) {
-                return fields;
-            }
-        }
-
-        // Запасной вариант для отправки через форму
-        const form = source.closest('form');
-
-        if (form) {
-            const fields = Array.from(
-                form.querySelectorAll(MESSAGE_FIELD_SELECTOR)
-            );
-
-            if (fields.length) {
-                return fields;
-            }
-        }
-
-        // Запасной вариант для контейнера чата
-        const chatArea = source.closest('chat-message-area');
-
-        if (chatArea) {
-            const fields = Array.from(
-                chatArea.querySelectorAll(MESSAGE_FIELD_SELECTOR)
-            );
-
-            if (fields.length) {
-                return fields;
-            }
-        }
-
-        return [];
+    // Разделяет список из Google на отдельные слова:
+    // "слово1 слово2,слово3;слово4"
+    function parseWords(items) {
+        return [
+            ...new Set(
+                items
+                    .flatMap(item =>
+                        String(item)
+                            .split(/[\s,;]+/)
+                            .map(normalizeText)
+                            .filter(Boolean)
+                    )
+            )
+        ];
     }
 
 
-    function loadForbiddenWords(force = false) {
-        const now = Date.now();
-
-        // Не делаем повторные запросы при одновременных focus/visibility событиях
-        if (!force && now - lastRequestAt < 10000) {
-            return;
+    function getFieldFromElement(element) {
+        if (!(element instanceof Element)) {
+            return null;
         }
 
-        lastRequestAt = now;
+        if (element.matches(MESSAGE_FIELD_SELECTOR)) {
+            return element;
+        }
 
+        // Кнопка и textarea находятся внутри одного блока .text
+        const textBlock = element.closest('.text');
+
+        if (textBlock) {
+            const field = textBlock.querySelector(
+                MESSAGE_FIELD_SELECTOR
+            );
+
+            if (field) {
+                return field;
+            }
+        }
+
+        // Дополнительный вариант для формы
+        const form = element.closest('form');
+
+        if (form) {
+            const field = form.querySelector(
+                MESSAGE_FIELD_SELECTOR
+            );
+
+            if (field) {
+                return field;
+            }
+        }
+
+        // Вариант для chat-message-area
+        const chatArea = element.closest('chat-message-area');
+
+        if (chatArea) {
+            const field = chatArea.querySelector(
+                MESSAGE_FIELD_SELECTOR
+            );
+
+            if (field) {
+                return field;
+            }
+        }
+
+        return null;
+    }
+
+
+    function loadForbiddenWords() {
         const separator =
             WORDS_API_URL.includes('?') ? '&' : '?';
 
         GM_xmlhttpRequest({
             method: 'GET',
-            url: WORDS_API_URL + separator + '_=' + now,
+            url:
+                WORDS_API_URL +
+                separator +
+                '_=' +
+                Date.now(),
 
             onload(response) {
                 try {
-                    const data = JSON.parse(response.responseText);
+                    const data =
+                        JSON.parse(response.responseText);
 
                     if (data.error) {
                         throw new Error(data.error);
@@ -132,35 +144,30 @@
 
                     if (!Array.isArray(data.words)) {
                         throw new Error(
-                            'В ответе Google нет массива words'
+                            'В ответе нет массива words'
                         );
                     }
 
-                    forbiddenWords = [
-                        ...new Set(
-                            data.words
-                                .map(normalizeText)
-                                .filter(Boolean)
-                        )
-                    ];
+                    // Важная часть: разделение слов по пробелам,
+                    // запятым и точкам с запятой
+                    forbiddenWords =
+                        parseWords(data.words);
 
                     wordsLoaded = true;
                     wordsLoadError = false;
 
                     console.log(
                         '[Фильтр слов] Загружено:',
-                        forbiddenWords.length
+                        forbiddenWords.length,
+                        forbiddenWords
                     );
                 } catch (error) {
                     console.error(
-                        '[Фильтр слов] Ошибка ответа:',
+                        '[Фильтр слов] Ошибка обработки списка:',
                         error
                     );
 
-                    // Если раньше список уже загрузился, продолжаем
-                    // использовать последнюю успешно полученную версию.
                     if (!wordsLoaded) {
-                        wordsLoaded = true;
                         wordsLoadError = true;
                     }
                 }
@@ -168,13 +175,11 @@
 
             onerror(error) {
                 console.error(
-                    '[Фильтр слов] Ошибка запроса:',
+                    '[Фильтр слов] Ошибка загрузки:',
                     error
                 );
 
-                // При сбое обновления сохраняем предыдущий список.
                 if (!wordsLoaded) {
-                    wordsLoaded = true;
                     wordsLoadError = true;
                 }
             }
@@ -183,14 +188,17 @@
 
 
     function findForbiddenWord(text) {
-        const normalizedText = normalizeText(text);
+        const normalizedText =
+            normalizeText(text);
 
         for (const word of forbiddenWords) {
             const escapedWord =
-                escapeRegExp(word).replace(/\s+/g, '\\s+');
+                escapeRegExp(word)
+                    .replace(/\s+/g, '\\s+');
 
             const regexp = new RegExp(
-                `(^|[^\\p{L}\\p{N}_])${escapedWord}` +
+                `(^|[^\\p{L}\\p{N}_])` +
+                escapedWord +
                 `($|[^\\p{L}\\p{N}_])`,
                 'iu'
             );
@@ -205,23 +213,17 @@
 
 
     function showWarning(message) {
-        if (!document.body) {
-            document.addEventListener(
-                'DOMContentLoaded',
-                () => showWarning(message),
-                { once: true }
-            );
-            return;
-        }
-
         if (warningElement) {
             warningElement.remove();
         }
 
         clearTimeout(warningTimer);
 
-        warningElement = document.createElement('div');
-        warningElement.textContent = message;
+        warningElement =
+            document.createElement('div');
+
+        warningElement.textContent =
+            message;
 
         Object.assign(warningElement.style, {
             position: 'fixed',
@@ -238,25 +240,23 @@
             boxShadow: '0 4px 15px rgba(0,0,0,.3)'
         });
 
-        document.body.appendChild(warningElement);
+        if (document.body) {
+            document.body.appendChild(warningElement);
+        }
 
-        warningTimer = setTimeout(() => {
-            warningElement?.remove();
-            warningElement = null;
-        }, 4500);
+        warningTimer =
+            setTimeout(() => {
+                warningElement?.remove();
+                warningElement = null;
+            }, 4500);
     }
 
 
     function blockSending(event, source) {
-        let fields;
+        const field =
+            getFieldFromElement(source);
 
-        if (Array.isArray(source)) {
-            fields = source;
-        } else {
-            fields = getMessageFields(source);
-        }
-
-        if (!fields.length) {
+        if (!field) {
             return;
         }
 
@@ -266,46 +266,35 @@
             event.stopImmediatePropagation();
 
             showWarning(
-                'Список запрещённых слов ещё загружается.'
+                wordsLoadError
+                    ? 'Не удалось загрузить список запрещённых слов.'
+                    : 'Список запрещённых слов ещё загружается.'
             );
+
             return;
         }
 
-        if (wordsLoadError) {
-            event.preventDefault();
-            event.stopPropagation();
-            event.stopImmediatePropagation();
+        const forbiddenWord =
+            findForbiddenWord(field.value);
 
-            showWarning(
-                'Не удалось загрузить список запрещённых слов.'
-            );
+        if (!forbiddenWord) {
             return;
         }
 
-        for (const field of fields) {
-            const forbiddenWord =
-                findForbiddenWord(field.value);
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
 
-            if (!forbiddenWord) {
-                continue;
-            }
+        showWarning(
+            `Сообщение не отправлено. ` +
+            `Найдено запрещённое слово: «${forbiddenWord}»`
+        );
 
-            event.preventDefault();
-            event.stopPropagation();
-            event.stopImmediatePropagation();
-
-            showWarning(
-                `Сообщение не отправлено. ` +
-                `Найдено запрещённое слово: «${forbiddenWord}»`
-            );
-
-            field.focus();
-            return;
-        }
+        field.focus();
     }
 
 
-    // Нажатие кнопки отправки
+    // Нажатие кнопки «Отправить»
     document.addEventListener('click', event => {
         const target = event.target;
 
@@ -322,55 +311,55 @@
     }, true);
 
 
-    // Enter отправляет сообщение; Shift+Enter оставляет перенос строки
+    // Отправка клавишей Enter
     document.addEventListener('keydown', event => {
         if (
             event.key !== 'Enter' ||
             event.shiftKey ||
-            !(event.target instanceof Element) ||
-            !event.target.matches(MESSAGE_FIELD_SELECTOR)
+            !(event.target instanceof Element)
         ) {
             return;
         }
 
-        blockSending(event, event.target);
+        if (
+            event.target.matches(
+                MESSAGE_FIELD_SELECTOR
+            )
+        ) {
+            blockSending(event, event.target);
+        }
     }, true);
 
 
-    // Отправка формы
+    // Отправка через форму
     document.addEventListener('submit', event => {
-        const fields = [];
-
-        if (event.submitter instanceof Element) {
-            fields.push(...getMessageFields(event.submitter));
-        }
-
         if (event.target instanceof Element) {
-            fields.push(...getMessageFields(event.target));
-        }
-
-        const uniqueFields = [...new Set(fields)];
-
-        if (uniqueFields.length) {
-            blockSending(event, uniqueFields);
+            blockSending(event, event.target);
         }
     }, true);
 
 
-    // Загружаем список при запуске, затем обновляем его периодически
-    loadForbiddenWords(true);
+    // Загружаем список сразу
+    loadForbiddenWords();
 
+    // Обновляем список каждые 5 минут
     setInterval(
-        () => loadForbiddenWords(true),
+        loadForbiddenWords,
         REFRESH_INTERVAL
     );
 
     // Обновляем список при возвращении на вкладку
-    window.addEventListener('focus', () => loadForbiddenWords());
+    window.addEventListener(
+        'focus',
+        loadForbiddenWords
+    );
 
-    document.addEventListener('visibilitychange', () => {
-        if (!document.hidden) {
-            loadForbiddenWords();
+    document.addEventListener(
+        'visibilitychange',
+        () => {
+            if (!document.hidden) {
+                loadForbiddenWords();
+            }
         }
-    });
+    );
 })();
