@@ -7,4 +7,5 @@
 6. Снова откройте плавающее окно.
 7. Иконка фильтра появится в списке расширений и на панели Edge.
 
-# Если ключ Google Apps Script изменится, обновите WORDS_API_URL в background.js и нажмите кнопку обновления расширения на chrome://extensions.
+# Если ключ Google Apps Script изменится
+обновите WORDS_API_URL в background.js и нажмите кнопку обновления расширения на chrome://extensions.
