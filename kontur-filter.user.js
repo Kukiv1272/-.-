@@ -1,11 +1,13 @@
 // ==UserScript==
 // @name         Фильтр запрещённых слов для Контур.Толка
 // @namespace    https://example.local/
-// @version      2.4
+// @version      2.5
 // @description  Блокирует сообщения с запрещёнными словами
 // @match        https://talk.kontur.ru/*
 // @match        https://*.talk.kontur.ru/*
 // @match        https://*.ktalk.ru/*
+// @downloadURL  https://raw.githubusercontent.com/Kukiv1272/-.-/refs/heads/main/kontur-filter.user.js
+// @updateURL    https://raw.githubusercontent.com/Kukiv1272/-.-/refs/heads/main/kontur-filter.user.js
 // @grant        GM_xmlhttpRequest
 // @connect      script.google.com
 // @connect      script.googleusercontent.com
