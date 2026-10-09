@@ -1,13 +1,11 @@
 // ==UserScript==
 // @name         Фильтр запрещённых слов для Контур.Толка
 // @namespace    https://example.local/
-// @version      2.3
+// @version      2.4
 // @description  Блокирует сообщения с запрещёнными словами
 // @match        https://talk.kontur.ru/*
 // @match        https://*.talk.kontur.ru/*
 // @match        https://*.ktalk.ru/*
-// @downloadURL  https://raw.githubusercontent.com/Kukiv1272/-.-/refs/heads/main/kontur-filter.user.js
-// @updateURL    https://raw.githubusercontent.com/Kukiv1272/-.-/refs/heads/main/kontur-filter.user.js
 // @grant        GM_xmlhttpRequest
 // @connect      script.google.com
 // @connect      script.googleusercontent.com
@@ -22,7 +20,6 @@
 
     const REFRESH_INTERVAL = 5 * 60 * 1000;
 
-    // Находит оба варианта поля сообщения
     const MESSAGE_FIELD_SELECTOR =
         'textarea.area[placeholder="Отправить сообщение"]';
 
@@ -52,8 +49,134 @@
     }
 
 
-    // Разделяет список из Google на отдельные слова:
-    // "слово1 слово2,слово3;слово4"
+    function isVisible(element) {
+        if (!(element instanceof Element)) {
+            return false;
+        }
+
+        const style =
+            window.getComputedStyle(element);
+
+        return (
+            style.display !== 'none' &&
+            style.visibility !== 'hidden' &&
+            element.getClientRects().length > 0
+        );
+    }
+
+
+    function chooseField(fields) {
+        const visibleFields =
+            fields.filter(isVisible);
+
+        if (!visibleFields.length) {
+            return null;
+        }
+
+        // Сначала выбираем активное поле
+        const activeField =
+            visibleFields.find(
+                field => field === document.activeElement
+            );
+
+        if (activeField) {
+            return activeField;
+        }
+
+        // Затем поле, в котором уже есть текст
+        const filledField =
+            visibleFields.find(
+                field => String(field.value || '').trim()
+            );
+
+        if (filledField) {
+            return filledField;
+        }
+
+        // Иначе берём первое видимое поле
+        return visibleFields[0];
+    }
+
+
+    function findMessageField(source) {
+        if (
+            source instanceof Element &&
+            source.matches(MESSAGE_FIELD_SELECTOR)
+        ) {
+            return source;
+        }
+
+        if (source instanceof Element) {
+            // Поле в плавающем или обычном окне чата
+            const textBlock =
+                source.closest('.text');
+
+            if (textBlock) {
+                const field =
+                    chooseField([
+                        ...textBlock.querySelectorAll(
+                            MESSAGE_FIELD_SELECTOR
+                        )
+                    ]);
+
+                if (field) {
+                    return field;
+                }
+            }
+
+            const chatArea =
+                source.closest('.chat-message-area');
+
+            if (chatArea) {
+                const field =
+                    chooseField([
+                        ...chatArea.querySelectorAll(
+                            MESSAGE_FIELD_SELECTOR
+                        )
+                    ]);
+
+                if (field) {
+                    return field;
+                }
+            }
+
+            const form =
+                source.closest('form');
+
+            if (form) {
+                const field =
+                    chooseField([
+                        ...form.querySelectorAll(
+                            MESSAGE_FIELD_SELECTOR
+                        )
+                    ]);
+
+                if (field) {
+                    return field;
+                }
+            }
+        }
+
+        // Проверяем активное поле
+        if (
+            document.activeElement instanceof Element &&
+            document.activeElement.matches(
+                MESSAGE_FIELD_SELECTOR
+            ) &&
+            isVisible(document.activeElement)
+        ) {
+            return document.activeElement;
+        }
+
+        // Последний вариант — любое видимое поле
+        return chooseField([
+            ...document.querySelectorAll(
+                MESSAGE_FIELD_SELECTOR
+            )
+        ]);
+    }
+
+
     function parseWords(items) {
         return [
             ...new Set(
@@ -69,64 +192,13 @@
     }
 
 
-    function getFieldFromElement(element) {
-        if (!(element instanceof Element)) {
-            return null;
-        }
-
-        if (element.matches(MESSAGE_FIELD_SELECTOR)) {
-            return element;
-        }
-
-        // Кнопка и textarea находятся внутри одного блока .text
-        const textBlock = element.closest('.text');
-
-        if (textBlock) {
-            const field = textBlock.querySelector(
-                MESSAGE_FIELD_SELECTOR
-            );
-
-            if (field) {
-                return field;
-            }
-        }
-
-        // Дополнительный вариант для формы
-        const form = element.closest('form');
-
-        if (form) {
-            const field = form.querySelector(
-                MESSAGE_FIELD_SELECTOR
-            );
-
-            if (field) {
-                return field;
-            }
-        }
-
-        // Вариант для chat-message-area
-        const chatArea = element.closest('chat-message-area');
-
-        if (chatArea) {
-            const field = chatArea.querySelector(
-                MESSAGE_FIELD_SELECTOR
-            );
-
-            if (field) {
-                return field;
-            }
-        }
-
-        return null;
-    }
-
-
     function loadForbiddenWords() {
         const separator =
             WORDS_API_URL.includes('?') ? '&' : '?';
 
         GM_xmlhttpRequest({
             method: 'GET',
+
             url:
                 WORDS_API_URL +
                 separator +
@@ -148,8 +220,6 @@
                         );
                     }
 
-                    // Важная часть: разделение слов по пробелам,
-                    // запятым и точкам с запятой
                     forbiddenWords =
                         parseWords(data.words);
 
@@ -157,13 +227,12 @@
                     wordsLoadError = false;
 
                     console.log(
-                        '[Фильтр слов] Загружено:',
-                        forbiddenWords.length,
-                        forbiddenWords
+                        '[Фильтр] Загружено слов:',
+                        forbiddenWords.length
                     );
                 } catch (error) {
                     console.error(
-                        '[Фильтр слов] Ошибка обработки списка:',
+                        '[Фильтр] Ошибка списка слов:',
                         error
                     );
 
@@ -175,7 +244,7 @@
 
             onerror(error) {
                 console.error(
-                    '[Фильтр слов] Ошибка загрузки:',
+                    '[Фильтр] Ошибка загрузки:',
                     error
                 );
 
@@ -188,22 +257,22 @@
 
 
     function findForbiddenWord(text) {
-        const normalizedText =
+        const message =
             normalizeText(text);
 
         for (const word of forbiddenWords) {
             const escapedWord =
-                escapeRegExp(word)
-                    .replace(/\s+/g, '\\s+');
+                escapeRegExp(word);
 
-            const regexp = new RegExp(
-                `(^|[^\\p{L}\\p{N}_])` +
-                escapedWord +
-                `($|[^\\p{L}\\p{N}_])`,
-                'iu'
-            );
+            const regexp =
+                new RegExp(
+                    `(^|[^\\p{L}\\p{N}_])` +
+                    escapedWord +
+                    `($|[^\\p{L}\\p{N}_])`,
+                    'iu'
+                );
 
-            if (regexp.test(normalizedText)) {
+            if (regexp.test(message)) {
                 return word;
             }
         }
@@ -213,10 +282,11 @@
 
 
     function showWarning(message) {
-        if (warningElement) {
-            warningElement.remove();
+        if (!document.body) {
+            return;
         }
 
+        warningElement?.remove();
         clearTimeout(warningTimer);
 
         warningElement =
@@ -240,9 +310,7 @@
             boxShadow: '0 4px 15px rgba(0,0,0,.3)'
         });
 
-        if (document.body) {
-            document.body.appendChild(warningElement);
-        }
+        document.body.appendChild(warningElement);
 
         warningTimer =
             setTimeout(() => {
@@ -252,18 +320,23 @@
     }
 
 
-    function blockSending(event, source) {
+    function stopEvent(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+    }
+
+
+    function checkMessage(event, source) {
         const field =
-            getFieldFromElement(source);
+            findMessageField(source);
 
         if (!field) {
             return;
         }
 
         if (!wordsLoaded) {
-            event.preventDefault();
-            event.stopPropagation();
-            event.stopImmediatePropagation();
+            stopEvent(event);
 
             showWarning(
                 wordsLoadError
@@ -281,9 +354,7 @@
             return;
         }
 
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
+        stopEvent(event);
 
         showWarning(
             `Сообщение не отправлено. ` +
@@ -294,24 +365,24 @@
     }
 
 
-    // Нажатие кнопки «Отправить»
+    // Кнопка отправки в плавающем и обычном окне
     document.addEventListener('click', event => {
-        const target = event.target;
-
-        if (!(target instanceof Element)) {
+        if (!(event.target instanceof Element)) {
             return;
         }
 
-        const sendButton =
-            target.closest(SEND_BUTTON_SELECTOR);
+        const button =
+            event.target.closest(
+                SEND_BUTTON_SELECTOR
+            );
 
-        if (sendButton) {
-            blockSending(event, sendButton);
+        if (button) {
+            checkMessage(event, button);
         }
     }, true);
 
 
-    // Отправка клавишей Enter
+    // Enter в любом видимом поле сообщения
     document.addEventListener('keydown', event => {
         if (
             event.key !== 'Enter' ||
@@ -326,29 +397,26 @@
                 MESSAGE_FIELD_SELECTOR
             )
         ) {
-            blockSending(event, event.target);
+            checkMessage(event, event.target);
         }
     }, true);
 
 
-    // Отправка через форму
+    // Дополнительная проверка отправки формы
     document.addEventListener('submit', event => {
         if (event.target instanceof Element) {
-            blockSending(event, event.target);
+            checkMessage(event, event.target);
         }
     }, true);
 
 
-    // Загружаем список сразу
     loadForbiddenWords();
 
-    // Обновляем список каждые 5 минут
     setInterval(
         loadForbiddenWords,
         REFRESH_INTERVAL
     );
 
-    // Обновляем список при возвращении на вкладку
     window.addEventListener(
         'focus',
         loadForbiddenWords
