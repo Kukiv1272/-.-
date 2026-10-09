@@ -19,7 +19,7 @@
     'use strict';
 
     const WORDS_API_URL =
-        'ВСТАВЬ_СЮДА_ТЕКУЩИЙ_URL_GOOGLE_APPS_SCRIPT';
+        'https://script.google.com/macros/s/AKfycbxiJq8rcHC6gotGHqqix-LY1DfR50S1zzuRGUb3vS0V_ksMMC78aqjbExjq5aJSLHBwrg/exec?key=sdkjlfbbndmbhki;ddmjhhkmsdfgokapdfjkkggdjfgiad;fg2395klsdfgdfgmjdjf';
 
     const REFRESH_INTERVAL =
         5 * 60 * 1000;
