@@ -256,5 +256,4 @@ chrome.action.onClicked.addListener(async () => {
     chrome.tabs.create({ url });
 });
 
-// Проверяем обновление и при первом запуске уже установленной версии.
 checkForUpdate();

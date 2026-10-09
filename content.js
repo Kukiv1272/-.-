@@ -269,7 +269,6 @@
         stop(event);
 
         try {
-            // Всегда читаем Google Таблицу прямо перед отправкой.
             await requestWords(true);
 
             const hit = findForbiddenWord(field.value);

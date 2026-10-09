@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Контур.Толк — фильтр запрещённых слов",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "description": "Блокирует отправку сообщений с запрещёнными словами в обычном и плавающем окне.",
   "homepage_url": "https://github.com/Kukiv1272/kontur-filter",
   "permissions": ["storage", "alarms"],
