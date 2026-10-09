@@ -13,7 +13,7 @@ let loadedAt = 0;
 let loadingPromise = null;
 let storageHydrated = false;
 
-const CACHE_TTL = 30000;
+const CACHE_TTL = 2 * 60 * 1000;
 
 let latestReleaseUrl = GITHUB_RELEASES_PAGE;
 

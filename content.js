@@ -9,7 +9,7 @@
     const BUTTON_SELECTOR =
         'button[type="submit"][aria-label="Отправить"]';
 
-    const REFRESH_INTERVAL = 30 * 1000;
+    const REFRESH_INTERVAL = 2 * 60 * 1000;
 
     let forbiddenWords = [];
     let wordsLoaded = false;
@@ -269,7 +269,17 @@
         stop(event);
 
         try {
-            await requestWords(true);
+            if (!wordsLoaded) {
+                requestWords(false).catch(() => {});
+                showWarning(
+                    wordsLoadError
+                        ? 'Не удалось загрузить список запрещённых слов.'
+                        : 'Список запрещённых слов ещё загружается.'
+                );
+                return;
+            }
+
+            requestWords(false).catch(() => {});
 
             const hit = findForbiddenWord(field.value);
 
@@ -351,7 +361,7 @@
 
     requestWords(false).catch(() => {});
     setInterval(
-        () => requestWords(false).catch(() => {}),
+        () => requestWords(true).catch(() => {}),
         REFRESH_INTERVAL
     );
 
