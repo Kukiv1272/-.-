@@ -6,8 +6,8 @@
 // @match        https://talk.kontur.ru/*
 // @match        https://*.talk.kontur.ru/*
 // @match        https://*.ktalk.ru/*
-// @downloadURL  https://raw.githubusercontent.com/Kukiv1272/-.-/refs/heads/main/kontur-filter.user.js
-// @updateURL    https://raw.githubusercontent.com/Kukiv1272/-.-/refs/heads/main/kontur-filter.user.js
+// @downloadURL  https://github.com/Kukiv1272/kontur-filter/raw/refs/heads/main/kontur-filter.user.js
+// @updateURL    https://github.com/Kukiv1272/kontur-filter/raw/refs/heads/main/kontur-filter.user.js
 // @grant        unsafeWindow
 // @grant        GM_xmlhttpRequest
 // @connect      script.google.com
