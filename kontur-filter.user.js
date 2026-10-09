@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Фильтр запрещённых слов для Контур.Толка
 // @namespace    https://example.local/
-// @version      2.5
+// @version      2.6
 // @description  Блокирует сообщения с запрещёнными словами
 // @match        https://talk.kontur.ru/*
 // @match        https://*.talk.kontur.ru/*
@@ -17,12 +17,13 @@
 (() => {
     'use strict';
 
+    // ОСТАВЬ ЗДЕСЬ СВОЙ ТЕКУЩИЙ URL GOOGLE APPS SCRIPT
     const WORDS_API_URL =
         'https://script.google.com/macros/s/AKfycbxiJq8rcHC6gotGHqqix-LY1DfR50S1zzuRGUb3vS0V_ksMMC78aqjbExjq5aJSLHBwrg/exec?key=sdkjlfbbndmbhki;ddmjhhkmsdfgokapdfjkkggdjfgiad;fg2395klsdfgdfgmjdjf';
 
     const REFRESH_INTERVAL = 5 * 60 * 1000;
 
-    const MESSAGE_FIELD_SELECTOR =
+    const FIELD_SELECTOR =
         'textarea.area[placeholder="Отправить сообщение"]';
 
     const SEND_BUTTON_SELECTOR =
@@ -34,6 +35,10 @@
 
     let warningElement = null;
     let warningTimer = null;
+
+    const attachedFields = new WeakSet();
+    const attachedButtons = new WeakSet();
+    const attachedForms = new WeakSet();
 
 
     function normalizeText(text) {
@@ -64,118 +69,6 @@
             style.visibility !== 'hidden' &&
             element.getClientRects().length > 0
         );
-    }
-
-
-    function chooseField(fields) {
-        const visibleFields =
-            fields.filter(isVisible);
-
-        if (!visibleFields.length) {
-            return null;
-        }
-
-        // Сначала выбираем активное поле
-        const activeField =
-            visibleFields.find(
-                field => field === document.activeElement
-            );
-
-        if (activeField) {
-            return activeField;
-        }
-
-        // Затем поле, в котором уже есть текст
-        const filledField =
-            visibleFields.find(
-                field => String(field.value || '').trim()
-            );
-
-        if (filledField) {
-            return filledField;
-        }
-
-        // Иначе берём первое видимое поле
-        return visibleFields[0];
-    }
-
-
-    function findMessageField(source) {
-        if (
-            source instanceof Element &&
-            source.matches(MESSAGE_FIELD_SELECTOR)
-        ) {
-            return source;
-        }
-
-        if (source instanceof Element) {
-            // Поле в плавающем или обычном окне чата
-            const textBlock =
-                source.closest('.text');
-
-            if (textBlock) {
-                const field =
-                    chooseField([
-                        ...textBlock.querySelectorAll(
-                            MESSAGE_FIELD_SELECTOR
-                        )
-                    ]);
-
-                if (field) {
-                    return field;
-                }
-            }
-
-            const chatArea =
-                source.closest('.chat-message-area');
-
-            if (chatArea) {
-                const field =
-                    chooseField([
-                        ...chatArea.querySelectorAll(
-                            MESSAGE_FIELD_SELECTOR
-                        )
-                    ]);
-
-                if (field) {
-                    return field;
-                }
-            }
-
-            const form =
-                source.closest('form');
-
-            if (form) {
-                const field =
-                    chooseField([
-                        ...form.querySelectorAll(
-                            MESSAGE_FIELD_SELECTOR
-                        )
-                    ]);
-
-                if (field) {
-                    return field;
-                }
-            }
-        }
-
-        // Проверяем активное поле
-        if (
-            document.activeElement instanceof Element &&
-            document.activeElement.matches(
-                MESSAGE_FIELD_SELECTOR
-            ) &&
-            isVisible(document.activeElement)
-        ) {
-            return document.activeElement;
-        }
-
-        // Последний вариант — любое видимое поле
-        return chooseField([
-            ...document.querySelectorAll(
-                MESSAGE_FIELD_SELECTOR
-            )
-        ]);
     }
 
 
@@ -232,27 +125,28 @@
                         '[Фильтр] Загружено слов:',
                         forbiddenWords.length
                     );
+
+                    console.log(
+                        '[Фильтр] Есть слово 1:',
+                        forbiddenWords.includes('1')
+                    );
                 } catch (error) {
+                    wordsLoadError = true;
+
                     console.error(
                         '[Фильтр] Ошибка списка слов:',
                         error
                     );
-
-                    if (!wordsLoaded) {
-                        wordsLoadError = true;
-                    }
                 }
             },
 
             onerror(error) {
+                wordsLoadError = true;
+
                 console.error(
                     '[Фильтр] Ошибка загрузки:',
                     error
                 );
-
-                if (!wordsLoaded) {
-                    wordsLoadError = true;
-                }
             }
         });
     }
@@ -264,7 +158,8 @@
 
         for (const word of forbiddenWords) {
             const escapedWord =
-                escapeRegExp(word);
+                escapeRegExp(word)
+                    .replace(/\s+/g, '\\s+');
 
             const regexp =
                 new RegExp(
@@ -283,12 +178,80 @@
     }
 
 
+    function getFieldForElement(element) {
+        if (!(element instanceof Element)) {
+            return null;
+        }
+
+        if (element.matches(FIELD_SELECTOR)) {
+            return element;
+        }
+
+        const containers = [
+            element.closest('.text'),
+            element.closest('.chat-message-area'),
+            element.closest('form')
+        ].filter(Boolean);
+
+        for (const container of containers) {
+            const fields = [
+                ...container.querySelectorAll(FIELD_SELECTOR)
+            ].filter(isVisible);
+
+            if (!fields.length) {
+                continue;
+            }
+
+            const activeField =
+                fields.find(
+                    field => field === document.activeElement
+                );
+
+            if (activeField) {
+                return activeField;
+            }
+
+            const filledField =
+                fields.find(
+                    field => String(field.value || '').trim()
+                );
+
+            return filledField || fields[0];
+        }
+
+        const activeField =
+            document.activeElement instanceof Element &&
+            document.activeElement.matches(FIELD_SELECTOR) &&
+            isVisible(document.activeElement)
+                ? document.activeElement
+                : null;
+
+        if (activeField) {
+            return activeField;
+        }
+
+        return [
+            ...document.querySelectorAll(FIELD_SELECTOR)
+        ].find(isVisible) || null;
+    }
+
+
+    function stopEvent(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+    }
+
+
     function showWarning(message) {
         if (!document.body) {
             return;
         }
 
-        warningElement?.remove();
+        if (warningElement) {
+            warningElement.remove();
+        }
+
         clearTimeout(warningTimer);
 
         warningElement =
@@ -309,7 +272,7 @@
             borderRadius: '8px',
             fontFamily: 'Arial, sans-serif',
             fontSize: '14px',
-            boxShadow: '0 4px 15px rgba(0,0,0,.3)'
+            boxShadow: '0 4px 15px rgba(0, 0, 0, .3)'
         });
 
         document.body.appendChild(warningElement);
@@ -322,16 +285,12 @@
     }
 
 
-    function stopEvent(event) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-    }
-
-
     function checkMessage(event, source) {
         const field =
-            findMessageField(source);
+            source instanceof Element &&
+            source.matches(FIELD_SELECTOR)
+                ? source
+                : getFieldForElement(source);
 
         if (!field) {
             return;
@@ -367,49 +326,127 @@
     }
 
 
-    // Кнопка отправки в плавающем и обычном окне
-    document.addEventListener('click', event => {
-        if (!(event.target instanceof Element)) {
+    function attachField(field) {
+        if (attachedFields.has(field)) {
             return;
         }
 
-        const button =
-            event.target.closest(
-                SEND_BUTTON_SELECTOR
-            );
+        attachedFields.add(field);
 
-        if (button) {
+        const handleKey = event => {
+            if (
+                event.key === 'Enter' &&
+                !event.shiftKey
+            ) {
+                checkMessage(event, field);
+            }
+        };
+
+        field.addEventListener(
+            'keydown',
+            handleKey,
+            true
+        );
+
+        field.addEventListener(
+            'keypress',
+            handleKey,
+            true
+        );
+
+        console.log(
+            '[Фильтр] Подключено поле:',
+            field
+        );
+    }
+
+
+    function attachButton(button) {
+        if (attachedButtons.has(button)) {
+            return;
+        }
+
+        attachedButtons.add(button);
+
+        const handleSend = event => {
             checkMessage(event, button);
-        }
-    }, true);
+        };
+
+        button.addEventListener(
+            'click',
+            handleSend,
+            true
+        );
+
+        button.addEventListener(
+            'pointerdown',
+            handleSend,
+            true
+        );
+
+        console.log(
+            '[Фильтр] Подключена кнопка:',
+            button
+        );
+    }
 
 
-    // Enter в любом видимом поле сообщения
-    document.addEventListener('keydown', event => {
-        if (
-            event.key !== 'Enter' ||
-            event.shiftKey ||
-            !(event.target instanceof Element)
-        ) {
+    function attachForm(form) {
+        if (attachedForms.has(form)) {
             return;
         }
 
-        if (
-            event.target.matches(
-                MESSAGE_FIELD_SELECTOR
-            )
-        ) {
-            checkMessage(event, event.target);
-        }
-    }, true);
+        attachedForms.add(form);
+
+        form.addEventListener(
+            'submit',
+            event => {
+                checkMessage(event, form);
+            },
+            true
+        );
+    }
 
 
-    // Дополнительная проверка отправки формы
-    document.addEventListener('submit', event => {
-        if (event.target instanceof Element) {
-            checkMessage(event, event.target);
+    function attachHandlers(root) {
+        if (!root || !root.querySelectorAll) {
+            return;
         }
-    }, true);
+
+        root.querySelectorAll(
+            FIELD_SELECTOR
+        ).forEach(attachField);
+
+        root.querySelectorAll(
+            SEND_BUTTON_SELECTOR
+        ).forEach(attachButton);
+
+        root.querySelectorAll(
+            'form'
+        ).forEach(attachForm);
+    }
+
+
+    function startObserver() {
+        attachHandlers(document);
+
+        const observer =
+            new MutationObserver(() => {
+                attachHandlers(document);
+            });
+
+        observer.observe(
+            document.documentElement,
+            {
+                childList: true,
+                subtree: true
+            }
+        );
+
+        console.log(
+            '[Фильтр] Наблюдение за плавающими окнами включено'
+        );
+    }
 
 
     loadForbiddenWords();
@@ -432,4 +469,14 @@
             }
         }
     );
+
+    if (document.documentElement) {
+        startObserver();
+    } else {
+        document.addEventListener(
+            'DOMContentLoaded',
+            startObserver,
+            { once: true }
+        );
+    }
 })();
