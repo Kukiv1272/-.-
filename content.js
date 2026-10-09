@@ -156,8 +156,9 @@
             }) || null;
     }
 
-    function findForbiddenWord(text) {
+    function findForbiddenWords(text) {
         const message = normalizeText(text);
+        const found = [];
 
         for (const word of forbiddenWords) {
             const pattern = escapeRegExp(word);
@@ -167,11 +168,11 @@
             );
 
             if (regexp.test(message)) {
-                return word;
+                found.push(word);
             }
         }
 
-        return null;
+        return [...new Set(found)];
     }
 
     function showWarning(message, backgroundColor = '#b00020') {
@@ -292,11 +293,13 @@
 
             requestWords(false).catch(() => {});
 
-            const hit = findForbiddenWord(field.value);
+            const hits = findForbiddenWords(field.value);
 
-            if (hit) {
+            if (hits.length) {
                 showWarning(
-                    `Сообщение не отправлено. Найдено слово: «${hit}»`
+                    `Сообщение не отправлено. Найдены слова: ${hits
+                        .map(word => `«${word}»`)
+                        .join(', ')}`
                 );
                 field.focus();
                 return;
