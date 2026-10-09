@@ -7,6 +7,7 @@ const GITHUB_RELEASES_PAGE =
     'https://github.com/Kukiv1272/kontur-filter/releases';
 const UPDATE_ALARM_NAME = 'kontur-filter-update-check';
 const UPDATE_CHECK_PERIOD_MINUTES = 360;
+const UPDATE_MENU_ID = 'check-kontur-filter-update';
 
 let cachedWords = [];
 let loadedAt = 0;
@@ -49,7 +50,7 @@ function isVersionNewer(latest, current) {
     return false;
 }
 
-async function checkForUpdate() {
+async function checkForUpdate(showNotification = false) {
     try {
         const response = await fetch(GITHUB_RELEASES_API, {
             cache: 'no-store',
@@ -84,6 +85,10 @@ async function checkForUpdate() {
                 `[Контур-фильтр] Доступно обновление ${latestVersion}.`,
                 latestReleaseUrl
             );
+
+            if (showNotification) {
+                await notifyTabsOfUpdate(latestVersion, latestReleaseUrl);
+            }
         } else {
             chrome.action.setBadgeText({ text: '' });
             chrome.action.setTitle({
@@ -105,6 +110,45 @@ async function checkForUpdate() {
             error
         );
     }
+}
+
+async function notifyTabsOfUpdate(version, url) {
+    const tabs = await chrome.tabs.query({
+        url: [
+            'https://talk.kontur.ru/*',
+            'https://*.talk.kontur.ru/*',
+            'https://*.ktalk.ru/*'
+        ]
+    });
+
+    await Promise.all(
+        tabs
+            .filter(tab => Number.isInteger(tab.id))
+            .map(tab =>
+                chrome.tabs.sendMessage(tab.id, {
+                    type: 'updateAvailable',
+                    version,
+                    url
+                }).catch(() => {})
+            )
+    );
+}
+
+function createUpdateContextMenu() {
+    chrome.contextMenus.removeAll(() => {
+        chrome.contextMenus.create({
+            id: UPDATE_MENU_ID,
+            title: 'Проверить обновления',
+            contexts: ['action']
+        }, () => {
+            if (chrome.runtime.lastError) {
+                console.warn(
+                    '[Контур-фильтр] Не удалось создать меню обновлений:',
+                    chrome.runtime.lastError.message
+                );
+            }
+        });
+    });
 }
 
 function normalizeText(text) {
@@ -233,6 +277,7 @@ chrome.runtime.onInstalled.addListener(() => {
     });
 
     checkForUpdate();
+    createUpdateContextMenu();
 });
 
 chrome.runtime.onStartup.addListener(() => {
@@ -241,6 +286,15 @@ chrome.runtime.onStartup.addListener(() => {
     });
 
     checkForUpdate();
+    createUpdateContextMenu();
+});
+
+chrome.contextMenus.onClicked.addListener((info) => {
+    if (info.menuItemId !== UPDATE_MENU_ID) {
+        return;
+    }
+
+    checkForUpdate(true);
 });
 
 chrome.alarms.onAlarm.addListener(alarm => {
@@ -257,3 +311,4 @@ chrome.action.onClicked.addListener(async () => {
 });
 
 checkForUpdate();
+createUpdateContextMenu();

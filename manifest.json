@@ -4,7 +4,7 @@
   "version": "1.0.2",
   "description": "Блокирует отправку сообщений с запрещёнными словами в обычном и плавающем окне.",
   "homepage_url": "https://github.com/Kukiv1272/kontur-filter",
-  "permissions": ["storage", "alarms"],
+  "permissions": ["storage", "alarms", "contextMenus"],
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",

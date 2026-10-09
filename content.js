@@ -174,7 +174,7 @@
         return null;
     }
 
-    function showWarning(message) {
+    function showWarning(message, backgroundColor = '#b00020') {
         warning?.remove();
         clearTimeout(warningTimer);
 
@@ -188,7 +188,7 @@
             transform: 'translateX(-50%)',
             zIndex: '2147483647',
             padding: '12px 18px',
-            background: '#b00020',
+            background: backgroundColor,
             color: '#fff',
             borderRadius: '8px',
             fontFamily: 'Arial, sans-serif',
@@ -203,6 +203,17 @@
             warning = null;
         }, 4500);
     }
+
+    chrome.runtime.onMessage.addListener(message => {
+        if (message?.type !== 'updateAvailable') {
+            return;
+        }
+
+        showWarning(
+            `Доступно обновление ${message.version}. Нажмите на значок расширения.`,
+            '#188038'
+        );
+    });
 
     function stop(event) {
         event.preventDefault();
